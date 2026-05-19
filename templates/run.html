@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.run_date }}{% endblock %}
+{% block subnav %}
+  <span class="run-date">{{ run.run_date }}</span>
+  <span class="status badge badge-{{ run.status }}">{{ run.status }}</span>
+{% endblock %}
+{% block content %}
+<section class="progress-bar-wrap">
+  <div class="progress-bar"><div id="bar-fill" style="width: {{ (done / total * 100) if total else 0 }}%"></div></div>
+  <span id="progress-text">{{ done }} / {{ total }} keywords processed</span>
+  <a id="generate-link"
+     href="{{ url_for('generate_xlsx', run_date=run.run_date) }}"
+     class="btn-primary {% if done < total %}disabled{% endif %}"
+     {% if done < total %}aria-disabled="true" tabindex="-1"{% endif %}>
+    Generate XLSX
+  </a>
+</section>
+
+<div class="keyword-list">
+{% for kw in run.keywords %}
+  {% set idx = loop.index0 %}
+  <details class="kw-card" data-idx="{{ idx }}" {% if not kw.processed_at %}open{% endif %}>
+    <summary>
+      <span class="kw-rank">{{ loop.index }}.</span>
+      <span class="kw-name">{{ kw.keyword }}</span>
+      <button type="button" class="btn-copy-kw" data-keyword="{{ kw.keyword }}"
+              title="Copy keyword to clipboard">⧉ copy</button>
+      <span class="kw-status badge {% if kw.processed_at %}badge-processed{% else %}badge-empty{% endif %}">
+        {% if kw.processed_at %}processed{% else %}empty{% endif %}
+      </span>
+    </summary>
+
+    <div class="kw-body">
+      <div class="paste-block">
+        <label for="paste-{{ idx }}">Paste raw SERP text</label>
+        <textarea id="paste-{{ idx }}" rows="6" class="paste-input"
+                  placeholder="Paste the full SERP page text here…">{{ kw.raw_paste or '' }}</textarea>
+        <div class="row">
+          <button class="btn-process" type="button">Process</button>
+          <span class="spinner hidden">Working…</span>
+          <span class="err-msg" role="alert"></span>
+        </div>
+      </div>
+
+      <div class="warnings-block">
+        {% if kw.warnings %}
+          {% for w in kw.warnings %}
+            <div class="warning">
+              ⚠ <strong>{% if w.rank %}rank {{ w.rank }}: {% endif %}{{ w.issue }}</strong>
+              {% if w.detail %}<div class="dim">{{ w.detail }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+
+      <table class="review-table {% if not kw.positions %}hidden{% endif %}">
+        <thead>
+          <tr>
+            <th>#</th><th>short_label</th><th>domain</th><th>category</th><th>reasoning</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in kw.positions %}
+          <tr data-rank="{{ p.rank }}" class="cat-{{ p.category }}">
+            <td>{{ p.rank }}</td>
+            <td><input class="f-short-label" value="{{ p.short_label }}"></td>
+            <td class="f-domain" title="{{ p.full_url }}">{{ p.domain }}</td>
+            <td>
+              <select class="f-category">
+                {% for c in categories %}
+                  <option value="{{ c }}" {% if c == p.category %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td class="dim f-reasoning" title="{{ p.reasoning }}">{{ p.reasoning }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="row save-row {% if not kw.positions %}hidden{% endif %}">
+        <button class="btn-save" type="button">Save edits</button>
+        <span class="save-status dim"></span>
+      </div>
+    </div>
+  </details>
+{% endfor %}
+</div>
+
+<script>
+  window.RUN_DATE = {{ run.run_date | tojson }};
+  window.TOTAL_KW = {{ total }};
+  window.CATEGORIES = {{ categories | tojson }};
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}

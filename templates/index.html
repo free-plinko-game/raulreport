@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Start a new run</h1>
+  <form action="{{ url_for('create_run') }}" method="post" class="row">
+    <label>Run date <input type="date" name="run_date" value="{{ today }}"></label>
+    <button type="submit">Start run</button>
+  </form>
+  <p class="hint">Creating a run with an existing date opens that run instead of overwriting.</p>
+</section>
+
+<section class="card">
+  <h2>Past runs</h2>
+  {% if runs %}
+  <table class="runs">
+    <thead><tr><th>Date</th><th>Status</th><th>Progress</th><th>Updated</th><th></th></tr></thead>
+    <tbody>
+      {% for r in runs %}
+      <tr>
+        <td><a href="{{ url_for('view_run', run_date=r.run_date) }}">{{ r.run_date }}</a></td>
+        <td><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
+        <td>{{ r.done }} / {{ r.total }}</td>
+        <td class="dim">{{ r.updated_at or '' }}</td>
+        <td>
+          {% if r.status == 'complete' %}
+            <a href="{{ url_for('generate_xlsx', run_date=r.run_date) }}">⬇ xlsx</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="dim">No runs yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

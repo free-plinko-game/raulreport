@@ -1,0 +1,123 @@
+"""JSON-on-disk persistence for runs."""
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+DATA_DIR = Path(__file__).parent / "data"
+RUNS_DIR = DATA_DIR / "runs"
+KEYWORDS_PATH = DATA_DIR / "keywords.json"
+
+VALID_CATEGORIES = {
+    "SUBDOMAIN", "HACKED", "PARASITE", "UGC",
+    "PUBLISHER", "OPERATOR", "GOV", "APP",
+}
+
+
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def load_keywords() -> list[str]:
+    with open(KEYWORDS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def run_path(run_date: str) -> Path:
+    return RUNS_DIR / f"{run_date}.json"
+
+
+def list_runs() -> list[dict]:
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    out = []
+    for p in sorted(RUNS_DIR.glob("*.json"), reverse=True):
+        try:
+            with open(p, encoding="utf-8") as f:
+                r = json.load(f)
+            done = sum(1 for k in r.get("keywords", []) if k.get("processed_at"))
+            out.append({
+                "run_date": r.get("run_date", p.stem),
+                "status": r.get("status", "in_progress"),
+                "created_at": r.get("created_at"),
+                "updated_at": r.get("updated_at"),
+                "total": len(r.get("keywords", [])),
+                "done": done,
+            })
+        except (json.JSONDecodeError, OSError):
+            continue
+    return out
+
+
+def create_run(run_date: str) -> dict:
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    path = run_path(run_date)
+    if path.exists():
+        return load_run(run_date)
+    keywords = load_keywords()
+    now = _utcnow()
+    run = {
+        "run_date": run_date,
+        "status": "in_progress",
+        "created_at": now,
+        "updated_at": now,
+        "keywords": [
+            {
+                "keyword": kw,
+                "processed_at": None,
+                "raw_paste": "",
+                "positions": [],
+                "warnings": [],
+            }
+            for kw in keywords
+        ],
+    }
+    _write(run)
+    return run
+
+
+def load_run(run_date: str) -> dict | None:
+    path = run_path(run_date)
+    if not path.exists():
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _write(run: dict) -> None:
+    run["updated_at"] = _utcnow()
+    all_done = all(k.get("processed_at") for k in run["keywords"])
+    run["status"] = "complete" if all_done else "in_progress"
+    path = run_path(run["run_date"])
+    tmp = path.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(run, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def update_keyword(
+    run_date: str,
+    idx: int,
+    *,
+    raw_paste: str | None = None,
+    positions: list[dict] | None = None,
+    warnings: list[dict] | None = None,
+    mark_processed: bool = False,
+) -> dict:
+    run = load_run(run_date)
+    if run is None:
+        raise FileNotFoundError(run_date)
+    if not 0 <= idx < len(run["keywords"]):
+        raise IndexError(idx)
+    kw = run["keywords"][idx]
+    if raw_paste is not None:
+        kw["raw_paste"] = raw_paste
+    if positions is not None:
+        kw["positions"] = positions
+    if warnings is not None:
+        kw["warnings"] = warnings
+    if mark_processed:
+        kw["processed_at"] = _utcnow()
+    _write(run)
+    return kw
