@@ -1,9 +1,11 @@
 """SERP Classifier — Flask app."""
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import secrets
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from functools import wraps
 from io import BytesIO
@@ -15,8 +17,14 @@ from flask import (
 )
 
 import storage
-from llm import LLMError, VALID_CATEGORIES, classify_paste
+from llm import (
+    LLMError, VALID_CATEGORIES, classify_paste, extract_ads_paste,
+    generate_ads_report_analysis, extract_serp_features, cluster_paa,
+)
 from xlsx_export import build_workbook
+from pdf_report import build_report
+from intelligence import operator_visibility_index, serp_landscape_summary, snippet_language_summary
+from pdf_intelligence import build_intelligence_report
 
 load_dotenv()
 
@@ -106,14 +114,21 @@ def process_keyword(run_date: str, idx: int):
         app.logger.exception("LLM failure for %s/%d", run_date, idx)
         return jsonify({"error": str(e)}), 502
 
+    try:
+        ads, _ads_usage = extract_ads_paste(kw_name, raw_paste)
+    except LLMError as e:
+        app.logger.warning("Ads LLM failure for %s/%d — continuing without ads: %s", run_date, idx, e)
+        ads = []
+
     storage.update_keyword(
         run_date, idx,
         raw_paste=raw_paste,
         positions=positions,
+        ads=ads,
         warnings=warnings,
         mark_processed=True,
     )
-    return jsonify({"positions": positions, "warnings": warnings})
+    return jsonify({"positions": positions, "ads": ads, "warnings": warnings})
 
 
 @app.route("/run/<run_date>/keyword/<int:idx>/save", methods=["POST"])
@@ -168,6 +183,151 @@ def generate_xlsx(run_date: str):
     return send_file(
         buf,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=fname,
+    )
+
+
+@app.route("/run/<run_date>/intelligence")
+@requires_auth
+def view_intelligence(run_date: str):
+    run = storage.load_run(run_date)
+    if run is None:
+        abort(404)
+    generated = bool(run.get("intelligence_generated_at"))
+    ovi = operator_visibility_index(run["keywords"]) if generated else None
+    landscape = serp_landscape_summary(run["keywords"]) if generated else None
+    snippet = snippet_language_summary(run["keywords"]) if generated else None
+    return render_template(
+        "intelligence.html",
+        run=run,
+        generated=generated,
+        ovi=ovi,
+        landscape=landscape,
+        snippet=snippet,
+    )
+
+
+@app.route("/run/<run_date>/intelligence/generate", methods=["POST"])
+@requires_auth
+def generate_intelligence(run_date: str):
+    run = storage.load_run(run_date)
+    if run is None:
+        abort(404)
+
+    payload = request.get_json(silent=True) or {}
+    force = bool(payload.get("force", False))
+
+    def _paste_hash(text: str) -> str:
+        return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+    # Build list of keywords that need extraction.
+    # Always skip keywords with no paste. On first run, skip already-extracted ones.
+    # On force (Regenerate), only re-extract if the raw_paste changed since last extraction —
+    # this prevents LLM non-determinism from shifting counts on unchanged data.
+    pending = []
+    for idx, kw_obj in enumerate(run["keywords"]):
+        if not kw_obj.get("raw_paste"):
+            continue
+        if not kw_obj.get("serp_features"):
+            pending.append((idx, kw_obj))
+            continue
+        if force:
+            current_hash = _paste_hash(kw_obj["raw_paste"])
+            stored_hash  = kw_obj.get("serp_features_paste_hash", "")
+            if current_hash != stored_hash:
+                pending.append((idx, kw_obj))
+
+    def _extract(idx: int, kw_obj: dict) -> tuple[int, dict | None, str, str | None]:
+        paste = kw_obj["raw_paste"]
+        try:
+            return idx, extract_serp_features(kw_obj["keyword"], paste), _paste_hash(paste), None
+        except LLMError as e:
+            app.logger.warning("SERP features failed kw=%r: %s", kw_obj["keyword"], e)
+            return idx, None, "", kw_obj["keyword"]
+
+    errors: list[str] = []
+    results: list[tuple[int, dict, str]] = []
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futures = {pool.submit(_extract, idx, kw_obj): idx for idx, kw_obj in pending}
+        for fut in as_completed(futures):
+            idx, features, paste_hash, err_kw = fut.result()
+            if err_kw:
+                errors.append(err_kw)
+            elif features is not None:
+                results.append((idx, features, paste_hash))
+
+    # Write sequentially to avoid storage race conditions
+    for idx, features, paste_hash in results:
+        storage.update_serp_features(run_date, idx, features, paste_hash)
+
+    # Reload after writes and cluster PAA
+    run = storage.load_run(run_date) or {}
+    paa_items = []
+    for kw_obj in run.get("keywords", []):
+        sf = kw_obj.get("serp_features") or {}
+        for q in sf.get("paa_questions", []):
+            paa_items.append({"question": q, "keyword": kw_obj["keyword"]})
+
+    paa_clusters = {}
+    if paa_items:
+        try:
+            paa_clusters = cluster_paa(run_date, paa_items)
+        except LLMError as e:
+            app.logger.warning("PAA cluster failed: %s", e)
+
+    storage.update_intelligence(run_date, paa_clusters)
+    return jsonify({"ok": True, "errors": errors, "paa_questions": len(paa_items)})
+
+
+@app.route("/run/<run_date>/intelligence/pdf")
+@requires_auth
+def intelligence_pdf(run_date: str):
+    run = storage.load_run(run_date)
+    if run is None:
+        abort(404)
+    if not run.get("intelligence_generated_at"):
+        abort(404)
+    landscape = serp_landscape_summary(run["keywords"])
+    snippet = snippet_language_summary(run["keywords"])
+    ovi = operator_visibility_index(run["keywords"])
+    pdf_bytes = build_intelligence_report(run, landscape, snippet, ovi)
+    fname = f"AUS_Intelligence_{run_date}.pdf"
+    return send_file(
+        BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=fname,
+    )
+
+
+@app.route("/run/<run_date>/ads-report")
+@requires_auth
+def ads_report(run_date: str):
+    run = storage.load_run(run_date)
+    if run is None:
+        abort(404)
+
+    keywords_with_ads = [
+        {"keyword": k["keyword"], "ads": k.get("ads", [])}
+        for k in run["keywords"]
+        if k.get("ads")
+    ]
+    if not keywords_with_ads:
+        return jsonify({"error": "No ads data found — process some keywords first"}), 400
+
+    try:
+        analysis = generate_ads_report_analysis(run_date, keywords_with_ads)
+    except LLMError as e:
+        app.logger.exception("Report LLM failure for %s", run_date)
+        return jsonify({"error": str(e)}), 502
+
+    pdf_bytes = build_report(run, analysis)
+    fname = f"AUS_Ads_Intelligence_{run_date}.pdf"
+    return send_file(
+        BytesIO(pdf_bytes),
+        mimetype="application/pdf",
         as_attachment=True,
         download_name=fname,
     )

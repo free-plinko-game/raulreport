@@ -2,6 +2,97 @@
   const runDate = window.RUN_DATE;
   const total = window.TOTAL_KW;
 
+  // --- Tab switching ---
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+    });
+  });
+
+  // --- Ads summary row expand/collapse ---
+  document.querySelectorAll('.ads-kw-row.has-ads').forEach(row => {
+    row.addEventListener('click', () => {
+      const detail = document.getElementById('ads-detail-' + row.dataset.idx);
+      if (detail) detail.classList.toggle('hidden');
+    });
+  });
+
+  function renderAdsTab(idx, ads) {
+    // Update summary row
+    const summaryRow = document.querySelector(`.ads-kw-row[data-idx="${idx}"]`);
+    if (!summaryRow) return;
+    const offshore = (ads || []).filter(a => a.is_offshore).length;
+    summaryRow.cells[1].textContent = ads.length || '—';
+    summaryRow.cells[2].innerHTML = offshore
+      ? `<span class="offshore-flag">⚠ ${offshore}</span>`
+      : (ads.length ? '0' : '—');
+    summaryRow.cells[3].className = 'dim';
+    summaryRow.cells[3].textContent = ads.map(a => a.advertiser).join(', ') || '—';
+
+    if (ads.length) {
+      summaryRow.classList.add('has-ads');
+      summaryRow.style.cursor = 'pointer';
+    }
+
+    // Rebuild or create detail row
+    let detailRow = document.getElementById('ads-detail-' + idx);
+    if (!detailRow) {
+      detailRow = document.createElement('tr');
+      detailRow.id = 'ads-detail-' + idx;
+      detailRow.className = 'ads-detail-row hidden';
+      summaryRow.after(detailRow);
+      summaryRow.addEventListener('click', () => detailRow.classList.toggle('hidden'));
+    }
+
+    if (!ads.length) {
+      detailRow.innerHTML = '';
+      return;
+    }
+
+    const rows = ads.map(ad => `
+      <tr>
+        <td>${ad.position}</td>
+        <td>${escapeHtml(ad.advertiser)}</td>
+        <td class="dim"><a href="${escapeHtml(ad.landing_url)}" target="_blank" rel="noopener">${escapeHtml(ad.display_url || ad.landing_url)}</a></td>
+        <td>${escapeHtml(ad.ad_position)}</td>
+        <td>${ad.is_offshore ? '<span class="offshore-flag">YES ⚠</span>' : 'no'}</td>
+        <td class="dim">${escapeHtml(ad.notes)}</td>
+      </tr>`).join('');
+
+    detailRow.innerHTML = `<td colspan="4">
+      <table class="ads-detail-table">
+        <thead><tr><th>#</th><th>Advertiser</th><th>Landing Page</th><th>Pos</th><th>Offshore</th><th>Notes</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></td>`;
+
+    // Refresh tab badge
+    updateAdsBadge();
+  }
+
+  function updateAdsBadge() {
+    let totalAds = 0, totalOffshore = 0;
+    document.querySelectorAll('.ads-kw-row').forEach(row => {
+      const count = parseInt(row.cells[1].textContent, 10) || 0;
+      totalAds += count;
+      const offshoreEl = row.cells[2].querySelector('.offshore-flag');
+      if (offshoreEl) totalOffshore += parseInt(offshoreEl.textContent.match(/\d+/)?.[0] || '0', 10);
+    });
+    const tabBtn = document.querySelector('.tab-btn[data-tab="ads"]');
+    if (!tabBtn) return;
+    let badge = tabBtn.querySelector('.ads-badge');
+    if (totalAds === 0) { if (badge) badge.remove(); return; }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'ads-badge';
+      tabBtn.appendChild(badge);
+    }
+    badge.className = 'ads-badge ' + (totalOffshore >= 4 ? 'badge-red' : totalOffshore >= 1 ? 'badge-amber' : 'badge-blue');
+    badge.textContent = totalOffshore > 0 ? `⚠ ${totalOffshore} offshore` : `${totalAds} ads`;
+  }
+
   function setProgress(done) {
     const pct = total ? (done / total) * 100 : 0;
     document.getElementById('bar-fill').style.width = pct + '%';
@@ -72,6 +163,37 @@
     });
   }
 
+  // --- PDF report download ---
+  const pdfBtn = document.getElementById('btn-pdf-report');
+  if (pdfBtn) {
+    pdfBtn.addEventListener('click', async () => {
+      const url = pdfBtn.dataset.url;
+      const spinner = document.getElementById('pdf-spinner');
+      const errEl = document.getElementById('pdf-err');
+      errEl.textContent = '';
+      spinner.classList.remove('hidden');
+      pdfBtn.disabled = true;
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        const blob = await resp.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `AUS_Ads_Intelligence_${runDate}.pdf`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } catch (err) {
+        errEl.textContent = 'Error: ' + err.message;
+      } finally {
+        spinner.classList.add('hidden');
+        pdfBtn.disabled = false;
+      }
+    });
+  }
+
   document.querySelectorAll('.btn-copy-kw').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
@@ -135,6 +257,7 @@
           bindRowDirty(tr);
         });
         renderWarnings(warningsBlock, data.warnings);
+        renderAdsTab(idx, data.ads || []);
         reviewTable.classList.remove('hidden');
         saveRow.classList.remove('hidden');
         markProcessed(card);

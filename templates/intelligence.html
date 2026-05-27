@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}Intelligence — {{ run.run_date }}{% endblock %}
+{% block subnav %}
+  <a href="{{ url_for('view_run', run_date=run.run_date) }}" class="back-link">← {{ run.run_date }}</a>
+  <span class="run-date">Intelligence</span>
+{% endblock %}
+
+{% block content %}
+<div class="intel-header">
+  <div>
+    <h1 class="intel-title">Run Intelligence</h1>
+    <p class="dim">{{ run.run_date }}
+      {%- if run.intelligence_regenerated_at %} &mdash; Regenerated {{ run.intelligence_regenerated_at }}
+      {%- elif run.intelligence_generated_at %} &mdash; Generated {{ run.intelligence_generated_at }}
+      {%- endif %}
+    </p>
+  </div>
+  <div class="intel-header-actions">
+    {% if not generated %}
+      <button id="btn-generate" class="btn-primary">Generate Intelligence</button>
+      <span id="gen-spinner" class="spinner hidden">Analysing {{ run.keywords | selectattr('raw_paste') | list | length }} keywords&hellip;</span>
+      <span id="gen-err" class="err-msg"></span>
+    {% else %}
+      <a href="{{ url_for('intelligence_pdf', run_date=run.run_date) }}" class="btn-secondary">⬇ Download PDF</a>
+      <button id="btn-generate" class="btn-secondary">Regenerate</button>
+      <span id="gen-spinner" class="spinner hidden">Regenerating&hellip;</span>
+      <span id="gen-err" class="err-msg"></span>
+    {% endif %}
+  </div>
+</div>
+
+{% if not generated %}
+<div class="intel-empty">
+  <p>No intelligence generated yet for this run.</p>
+  <p class="dim">Click <strong>Generate Intelligence</strong> to run SERP feature extraction and PAA clustering across all processed keywords. This makes one LLM call per keyword plus one clustering call — around 30–60 seconds for a full run.</p>
+</div>
+
+{% else %}
+
+{# ── SECTION 1 — SERP LANDSCAPE ── #}
+<section class="intel-section" id="section-landscape">
+  <h2 class="intel-section-title">1. SERP Landscape</h2>
+
+  {% set snippet_count = landscape.keywords_with_featured_snippet %}
+  {% set fc = landscape.feature_counts %}
+
+  <div class="intel-stat-row">
+    <div class="intel-stat">
+      <span class="intel-stat-val">{{ snippet_count }}</span>
+      <span class="intel-stat-label">Featured Snippets</span>
+    </div>
+    <div class="intel-stat">
+      <span class="intel-stat-val">{{ fc.has_paa }}</span>
+      <span class="intel-stat-label">PAA Boxes</span>
+    </div>
+    <div class="intel-stat">
+      <span class="intel-stat-val">{{ fc.has_news_box }}</span>
+      <span class="intel-stat-label">News Boxes</span>
+    </div>
+    <div class="intel-stat">
+      <span class="intel-stat-val">{{ fc.has_video_carousel }}</span>
+      <span class="intel-stat-label">Video Carousels</span>
+    </div>
+    <div class="intel-stat">
+      <span class="intel-stat-val">{{ fc.has_knowledge_panel }}</span>
+      <span class="intel-stat-label">Knowledge Panels</span>
+    </div>
+    <div class="intel-stat">
+      <span class="intel-stat-val">{{ fc.has_shopping }}</span>
+      <span class="intel-stat-label">Shopping</span>
+    </div>
+  </div>
+
+  {% if snippet_count > 0 %}
+  <h3 class="intel-sub">Featured Snippet Ownership</h3>
+  {% set scd = landscape.snippet_category_breakdown %}
+  <div class="snippet-ownership">
+    {% for cat, count in scd.items() | sort(attribute='1', reverse=True) %}
+    <div class="snippet-row">
+      <span class="cat-pill cat-{{ cat }}">{{ cat }}</span>
+      <div class="snippet-bar-wrap">
+        <div class="snippet-bar" style="width: {{ (count / snippet_count * 100) | round }}%"></div>
+      </div>
+      <span class="snippet-bar-label">{{ count }} / {{ snippet_count }} ({{ (count / snippet_count * 100) | round }}%)</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <h3 class="intel-sub">Keyword Detail</h3>
+  <table class="intel-table">
+    <thead>
+      <tr>
+        <th>Keyword</th>
+        <th>Snippet</th>
+        <th>PAA</th>
+        <th>News</th>
+        <th>Video</th>
+        <th>KP</th>
+        <th>Features</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for kw in run.keywords %}
+        {% set sf = kw.serp_features or {} %}
+        <tr>
+          <td>{{ kw.keyword }}</td>
+          <td class="dim">{{ sf.featured_snippet_domain or '—' }}</td>
+          <td class="intel-flag">{% if sf.has_paa %}<span class="flag-yes">✓</span>{% else %}—{% endif %}</td>
+          <td class="intel-flag">{% if sf.has_news_box %}<span class="flag-yes">✓</span>{% else %}—{% endif %}</td>
+          <td class="intel-flag">{% if sf.has_video_carousel %}<span class="flag-yes">✓</span>{% else %}—{% endif %}</td>
+          <td class="intel-flag">{% if sf.has_knowledge_panel %}<span class="flag-yes">✓</span>{% else %}—{% endif %}</td>
+          <td class="intel-feature-count">{{ sf.serp_feature_count or 0 }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{# ── SECTION 2 — SNIPPET LANGUAGE ── #}
+<section class="intel-section" id="section-snippets">
+  <h2 class="intel-section-title">2. Snippet Language Analysis</h2>
+
+  <div class="intel-two-col">
+    <div>
+      <h3 class="intel-sub">Bonus Copy Density</h3>
+      <p class="dim" style="font-size:11px;margin-bottom:8px">Results mentioning bonuses, deposit matches or free spins</p>
+      {% for item in snippet.bonus_heat[:12] %}
+        {% if item.bonus_count > 0 %}
+        <div class="heat-row">
+          <span class="heat-label">{{ item.keyword }}</span>
+          <div class="heat-bar-wrap">
+            <div class="heat-bar heat-bonus" style="width: {{ (item.bonus_count / 10 * 100) }}%"></div>
+          </div>
+          <span class="heat-count">{{ item.bonus_count }}/10</span>
+        </div>
+        {% endif %}
+      {% endfor %}
+      {% if snippet.all_bonus_amounts %}
+      <p class="dim" style="margin-top:8px;font-size:11px">Amounts seen: {{ snippet.all_bonus_amounts | join(', ') }}</p>
+      {% endif %}
+    </div>
+
+    <div>
+      <h3 class="intel-sub">Compliance Language Distribution</h3>
+      <p class="dim" style="font-size:11px;margin-bottom:8px">Results mentioning AU licensing, ACMA, responsible gambling</p>
+      {% set cd = snippet.compliance_distribution %}
+      <div class="compliance-buckets">
+        <div class="compliance-bucket bucket-warn">
+          <span class="bucket-val">{{ cd.zero }}</span>
+          <span class="bucket-label">0 mentions</span>
+          <span class="bucket-note dim">keywords</span>
+        </div>
+        <div class="compliance-bucket bucket-mid">
+          <span class="bucket-val">{{ cd.low_1_3 }}</span>
+          <span class="bucket-label">1–3 mentions</span>
+          <span class="bucket-note dim">keywords</span>
+        </div>
+        <div class="compliance-bucket bucket-ok">
+          <span class="bucket-val">{{ cd.high_4_plus }}</span>
+          <span class="bucket-label">4+ mentions</span>
+          <span class="bucket-note dim">keywords</span>
+        </div>
+      </div>
+      {% if snippet.all_cta_types %}
+      <h3 class="intel-sub" style="margin-top:16px">CTA Patterns</h3>
+      <div class="cta-pills">
+        {% for cta in snippet.all_cta_types %}
+          <span class="cta-pill">{{ cta }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if snippet.freshness_years %}
+      <p class="dim" style="margin-top:8px;font-size:11px">Years cited in snippets: {{ snippet.freshness_years | join(', ') }}</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{# ── SECTION 3 — OPERATOR VISIBILITY INDEX ── #}
+<section class="intel-section" id="section-ovi">
+  <h2 class="intel-section-title">3. Operator Visibility Index</h2>
+  <p class="dim" style="margin-bottom:12px">Domains ranked by keyword breadth across all {{ ovi.total_keywords }} keywords. Filter by category:</p>
+
+  <div class="ovi-filters">
+    <button class="ovi-filter active" data-cat="ALL">All</button>
+    {% for cat in ovi.categories %}
+      <button class="ovi-filter" data-cat="{{ cat }}">{{ cat }}</button>
+    {% endfor %}
+  </div>
+
+  <table class="intel-table ovi-table" id="ovi-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Domain</th>
+        <th>Category</th>
+        <th>Keywords</th>
+        <th>Appearances</th>
+        <th>Avg Pos</th>
+        <th>Best</th>
+        {# Phase 4 will append: Licence Found | Affiliate Signals #}
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in ovi.domains %}
+      <tr data-cat="{{ d.category }}">
+        <td class="dim">{{ loop.index }}</td>
+        <td class="ovi-domain">
+          <span class="domain-name">{{ d.domain }}</span>
+        </td>
+        <td><span class="cat-pill cat-{{ d.category }}">{{ d.category }}</span></td>
+        <td><strong>{{ d.keyword_count }}</strong> / {{ ovi.total_keywords }}</td>
+        <td class="dim">{{ d.total_appearances }}</td>
+        <td class="dim">{{ d.avg_position }}</td>
+        <td class="dim">{{ d.best_position }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{# ── SECTION 4 — PEOPLE ALSO ASK ── #}
+<section class="intel-section" id="section-paa">
+  <h2 class="intel-section-title">4. People Also Ask</h2>
+
+  {% set clusters = run.paa_clusters.clusters if run.paa_clusters else [] %}
+  {% set total_q = run.paa_clusters.total_questions if run.paa_clusters else 0 %}
+
+  {% if not clusters %}
+    <p class="dim">No PAA questions detected across this run.</p>
+  {% else %}
+    <p class="dim" style="margin-bottom:12px">
+      {{ run.paa_clusters.total_unique_questions }} unique questions &mdash; {{ total_q }} total appearances &mdash;
+      <button class="btn-copy-paa btn-link" id="btn-copy-paa">Copy all questions</button>
+    </p>
+    {% for cluster in clusters %}
+    <details class="paa-cluster" {% if loop.index == 1 %}open{% endif %}>
+      <summary>
+        <span class="paa-theme">{{ cluster.theme }}</span>
+        <span class="badge badge-paa">{{ cluster.question_count }}</span>
+      </summary>
+      <table class="intel-table paa-table">
+        <thead>
+          <tr><th>Question</th><th>Keywords</th></tr>
+        </thead>
+        <tbody>
+          {% for item in cluster.questions %}
+          <tr>
+            <td>{{ item.question }}</td>
+            <td class="dim">{{ item.keywords | join(', ') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </details>
+    {% endfor %}
+  {% endif %}
+</section>
+
+{% endif %}{# end generated #}
+
+<script>
+  window.GENERATE_URL = {{ url_for('generate_intelligence', run_date=run.run_date) | tojson }};
+  window.INTEL_GENERATED = {{ generated | tojson }};
+</script>
+<script src="{{ url_for('static', filename='intelligence.js') }}"></script>
+{% endblock %}

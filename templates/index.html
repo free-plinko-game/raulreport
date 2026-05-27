@@ -13,13 +13,26 @@
   <h2>Past runs</h2>
   {% if runs %}
   <table class="runs">
-    <thead><tr><th>Date</th><th>Status</th><th>Progress</th><th>Updated</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Status</th><th>Progress</th><th>Ads Intel</th><th>Updated</th><th></th></tr></thead>
     <tbody>
       {% for r in runs %}
       <tr>
         <td><a href="{{ url_for('view_run', run_date=r.run_date) }}">{{ r.run_date }}</a></td>
         <td><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
         <td>{{ r.done }} / {{ r.total }}</td>
+        <td>
+          {% if r.total_ads %}
+            {% if r.total_offshore >= 4 %}
+              <span class="ads-badge badge-red">⚠ {{ r.total_offshore }} offshore</span>
+            {% elif r.total_offshore >= 1 %}
+              <span class="ads-badge badge-amber">⚠ {{ r.total_offshore }} offshore</span>
+            {% else %}
+              <span class="ads-badge badge-blue">{{ r.total_ads }} ads</span>
+            {% endif %}
+          {% else %}
+            <span class="dim">—</span>
+          {% endif %}
+        </td>
         <td class="dim">{{ r.updated_at or '' }}</td>
         <td>
           {% if r.status == 'complete' %}

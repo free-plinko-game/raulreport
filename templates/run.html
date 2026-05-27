@@ -14,77 +14,175 @@
      {% if done < total %}aria-disabled="true" tabindex="-1"{% endif %}>
     Generate XLSX
   </a>
+  <a href="{{ url_for('view_intelligence', run_date=run.run_date) }}" class="btn-secondary">
+    View Intelligence →
+  </a>
 </section>
 
-<div class="keyword-list">
+{# --- compute ads summary for tab badge --- #}
+{% set ns = namespace(total_ads=0, total_offshore=0) %}
 {% for kw in run.keywords %}
-  {% set idx = loop.index0 %}
-  <details class="kw-card" data-idx="{{ idx }}" {% if not kw.processed_at %}open{% endif %}>
-    <summary>
-      <span class="kw-rank">{{ loop.index }}.</span>
-      <span class="kw-name">{{ kw.keyword }}</span>
-      <button type="button" class="btn-copy-kw" data-keyword="{{ kw.keyword }}"
-              title="Copy keyword to clipboard">⧉ copy</button>
-      <span class="kw-status badge {% if kw.processed_at %}badge-processed{% else %}badge-empty{% endif %}">
-        {% if kw.processed_at %}processed{% else %}empty{% endif %}
-      </span>
-    </summary>
+  {% for ad in kw.ads %}
+    {% set ns.total_ads = ns.total_ads + 1 %}
+    {% if ad.is_offshore %}{% set ns.total_offshore = ns.total_offshore + 1 %}{% endif %}
+  {% endfor %}
+{% endfor %}
 
-    <div class="kw-body">
-      <div class="paste-block">
-        <label for="paste-{{ idx }}">Paste raw SERP text</label>
-        <textarea id="paste-{{ idx }}" rows="6" class="paste-input"
-                  placeholder="Paste the full SERP page text here…">{{ kw.raw_paste or '' }}</textarea>
-        <div class="row">
-          <button class="btn-process" type="button">Process</button>
-          <span class="spinner hidden">Working…</span>
-          <span class="err-msg" role="alert"></span>
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="serp">SERP Overview</button>
+  <button class="tab-btn" data-tab="ads">
+    Ads Intelligence
+    {% if ns.total_ads > 0 %}
+      <span class="ads-badge {% if ns.total_offshore >= 4 %}badge-red{% elif ns.total_offshore >= 1 %}badge-amber{% else %}badge-blue{% endif %}">
+        {% if ns.total_offshore > 0 %}⚠ {{ ns.total_offshore }} offshore{% else %}{{ ns.total_ads }} ads{% endif %}
+      </span>
+    {% endif %}
+  </button>
+</div>
+
+{# ===================== TAB 1 — SERP Overview ===================== #}
+<div id="tab-serp" class="tab-panel">
+  <div class="keyword-list">
+  {% for kw in run.keywords %}
+    {% set idx = loop.index0 %}
+    <details class="kw-card" data-idx="{{ idx }}" {% if not kw.processed_at %}open{% endif %}>
+      <summary>
+        <span class="kw-rank">{{ loop.index }}.</span>
+        <span class="kw-name">{{ kw.keyword }}</span>
+        <button type="button" class="btn-copy-kw" data-keyword="{{ kw.keyword }}"
+                title="Copy keyword to clipboard">⧉ copy</button>
+        <span class="kw-status badge {% if kw.processed_at %}badge-processed{% else %}badge-empty{% endif %}">
+          {% if kw.processed_at %}processed{% else %}empty{% endif %}
+        </span>
+      </summary>
+
+      <div class="kw-body">
+        <div class="paste-block">
+          <label for="paste-{{ idx }}">Paste raw SERP text</label>
+          <textarea id="paste-{{ idx }}" rows="6" class="paste-input"
+                    placeholder="Paste the full SERP page text here…">{{ kw.raw_paste or '' }}</textarea>
+          <div class="row">
+            <button class="btn-process" type="button">Process</button>
+            <span class="spinner hidden">Working…</span>
+            <span class="err-msg" role="alert"></span>
+          </div>
+        </div>
+
+        <div class="warnings-block">
+          {% if kw.warnings %}
+            {% for w in kw.warnings %}
+              <div class="warning">
+                ⚠ <strong>{% if w.rank %}rank {{ w.rank }}: {% endif %}{{ w.issue }}</strong>
+                {% if w.detail %}<div class="dim">{{ w.detail }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+
+        <table class="review-table {% if not kw.positions %}hidden{% endif %}">
+          <thead>
+            <tr>
+              <th>#</th><th>short_label</th><th>domain</th><th>category</th><th>reasoning</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in kw.positions %}
+            <tr data-rank="{{ p.rank }}" class="cat-{{ p.category }}">
+              <td>{{ p.rank }}</td>
+              <td><input class="f-short-label" value="{{ p.short_label }}"></td>
+              <td class="f-domain" title="{{ p.full_url }}">{{ p.domain }}</td>
+              <td>
+                <select class="f-category">
+                  {% for c in categories %}
+                    <option value="{{ c }}" {% if c == p.category %}selected{% endif %}>{{ c }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td class="dim f-reasoning" title="{{ p.reasoning }}">{{ p.reasoning }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <div class="row save-row {% if not kw.positions %}hidden{% endif %}">
+          <button class="btn-save" type="button">Save edits</button>
+          <span class="save-status dim"></span>
         </div>
       </div>
+    </details>
+  {% endfor %}
+  </div>
+</div>
 
-      <div class="warnings-block">
-        {% if kw.warnings %}
-          {% for w in kw.warnings %}
-            <div class="warning">
-              ⚠ <strong>{% if w.rank %}rank {{ w.rank }}: {% endif %}{{ w.issue }}</strong>
-              {% if w.detail %}<div class="dim">{{ w.detail }}</div>{% endif %}
-            </div>
-          {% endfor %}
-        {% endif %}
-      </div>
-
-      <table class="review-table {% if not kw.positions %}hidden{% endif %}">
-        <thead>
-          <tr>
-            <th>#</th><th>short_label</th><th>domain</th><th>category</th><th>reasoning</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for p in kw.positions %}
-          <tr data-rank="{{ p.rank }}" class="cat-{{ p.category }}">
-            <td>{{ p.rank }}</td>
-            <td><input class="f-short-label" value="{{ p.short_label }}"></td>
-            <td class="f-domain" title="{{ p.full_url }}">{{ p.domain }}</td>
-            <td>
-              <select class="f-category">
-                {% for c in categories %}
-                  <option value="{{ c }}" {% if c == p.category %}selected{% endif %}>{{ c }}</option>
-                {% endfor %}
-              </select>
-            </td>
-            <td class="dim f-reasoning" title="{{ p.reasoning }}">{{ p.reasoning }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-
-      <div class="row save-row {% if not kw.positions %}hidden{% endif %}">
-        <button class="btn-save" type="button">Save edits</button>
-        <span class="save-status dim"></span>
-      </div>
+{# ===================== TAB 2 — Ads Intelligence ===================== #}
+<div id="tab-ads" class="tab-panel hidden">
+  <div class="ads-tab-header">
+    {% if ns.total_ads == 0 %}
+      <p class="dim">No ads extracted yet — process keywords first.</p>
+    {% else %}
+      <p class="ads-summary-line">
+        <strong>{{ ns.total_ads }}</strong> ads found across {{ run.keywords | selectattr('ads') | list | length }} keywords
+        {% if ns.total_offshore > 0 %} — <span class="offshore-flag">⚠ {{ ns.total_offshore }} offshore</span>{% endif %}
+      </p>
+    {% endif %}
+    <div class="ads-report-actions">
+      <button id="btn-pdf-report"
+              class="btn-primary"
+              {% if ns.total_ads == 0 %}disabled{% endif %}
+              data-url="{{ url_for('ads_report', run_date=run.run_date) }}">
+        ⬇ Download PDF Report
+      </button>
+      <span id="pdf-spinner" class="spinner hidden">Generating report…</span>
+      <span id="pdf-err" class="err-msg"></span>
     </div>
-  </details>
-{% endfor %}
+  </div>
+
+  <table class="ads-summary-table">
+    <thead>
+      <tr>
+        <th>Keyword</th>
+        <th>Ads</th>
+        <th>Offshore</th>
+        <th>Advertisers</th>
+      </tr>
+    </thead>
+    <tbody id="ads-summary-tbody">
+      {% for kw in run.keywords %}
+        {% set kw_offshore = kw.ads | selectattr('is_offshore') | list | length %}
+        <tr class="ads-kw-row {% if kw.ads %}has-ads{% endif %}"
+            data-idx="{{ loop.index0 }}"
+            {% if kw.ads %}style="cursor:pointer"{% endif %}>
+          <td>{{ kw.keyword }}</td>
+          <td>{{ kw.ads | length or '—' }}</td>
+          <td>{% if kw_offshore %}<span class="offshore-flag">⚠ {{ kw_offshore }}</span>{% elif kw.ads %}0{% else %}—{% endif %}</td>
+          <td class="dim">{{ kw.ads | map(attribute='advertiser') | join(', ') or '—' }}</td>
+        </tr>
+        {% if kw.ads %}
+        <tr class="ads-detail-row hidden" id="ads-detail-{{ loop.index0 }}">
+          <td colspan="4">
+            <table class="ads-detail-table">
+              <thead>
+                <tr><th>#</th><th>Advertiser</th><th>Landing Page</th><th>Pos</th><th>Offshore</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                {% for ad in kw.ads %}
+                <tr>
+                  <td>{{ ad.position }}</td>
+                  <td>{{ ad.advertiser }}</td>
+                  <td class="dim"><a href="{{ ad.landing_url }}" target="_blank" rel="noopener">{{ ad.display_url or ad.landing_url }}</a></td>
+                  <td>{{ ad.ad_position }}</td>
+                  <td>{% if ad.is_offshore %}<span class="offshore-flag">YES ⚠</span>{% else %}no{% endif %}</td>
+                  <td class="dim">{{ ad.notes }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 
 <script>

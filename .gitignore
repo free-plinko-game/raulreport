@@ -5,6 +5,7 @@ __pycache__/
 venv/
 data/runs/
 *.xlsx
+*.pdf
 .claude/
 .DS_Store
 

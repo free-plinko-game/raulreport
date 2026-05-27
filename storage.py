@@ -36,14 +36,22 @@ def list_runs() -> list[dict]:
         try:
             with open(p, encoding="utf-8") as f:
                 r = json.load(f)
-            done = sum(1 for k in r.get("keywords", []) if k.get("processed_at"))
+            keywords = r.get("keywords", [])
+            done = sum(1 for k in keywords if k.get("processed_at"))
+            total_ads = sum(len(k.get("ads", [])) for k in keywords)
+            total_offshore = sum(
+                sum(1 for a in k.get("ads", []) if a.get("is_offshore"))
+                for k in keywords
+            )
             out.append({
                 "run_date": r.get("run_date", p.stem),
                 "status": r.get("status", "in_progress"),
                 "created_at": r.get("created_at"),
                 "updated_at": r.get("updated_at"),
-                "total": len(r.get("keywords", [])),
+                "total": len(keywords),
                 "done": done,
+                "total_ads": total_ads,
+                "total_offshore": total_offshore,
             })
         except (json.JSONDecodeError, OSError):
             continue
@@ -62,13 +70,18 @@ def create_run(run_date: str) -> dict:
         "status": "in_progress",
         "created_at": now,
         "updated_at": now,
+        "paa_clusters": None,
+        "intelligence_generated_at": None,
+        "intelligence_regenerated_at": None,
         "keywords": [
             {
                 "keyword": kw,
                 "processed_at": None,
                 "raw_paste": "",
                 "positions": [],
+                "ads": [],
                 "warnings": [],
+                "serp_features": None,
             }
             for kw in keywords
         ],
@@ -96,12 +109,35 @@ def _write(run: dict) -> None:
     os.replace(tmp, path)
 
 
+def update_serp_features(run_date: str, idx: int, serp_features: dict, paste_hash: str = "") -> None:
+    run = load_run(run_date)
+    if run is None:
+        raise FileNotFoundError(run_date)
+    run["keywords"][idx]["serp_features"] = serp_features
+    run["keywords"][idx]["serp_features_paste_hash"] = paste_hash
+    _write(run)
+
+
+def update_intelligence(run_date: str, paa_clusters: dict) -> None:
+    run = load_run(run_date)
+    if run is None:
+        raise FileNotFoundError(run_date)
+    run["paa_clusters"] = paa_clusters
+    now = _utcnow()
+    if run.get("intelligence_generated_at"):
+        run["intelligence_regenerated_at"] = now
+    else:
+        run["intelligence_generated_at"] = now
+    _write(run)
+
+
 def update_keyword(
     run_date: str,
     idx: int,
     *,
     raw_paste: str | None = None,
     positions: list[dict] | None = None,
+    ads: list[dict] | None = None,
     warnings: list[dict] | None = None,
     mark_processed: bool = False,
 ) -> dict:
@@ -115,6 +151,8 @@ def update_keyword(
         kw["raw_paste"] = raw_paste
     if positions is not None:
         kw["positions"] = positions
+    if ads is not None:
+        kw["ads"] = ads
     if warnings is not None:
         kw["warnings"] = warnings
     if mark_processed:
