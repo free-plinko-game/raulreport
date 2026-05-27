@@ -263,6 +263,7 @@
 <script>
   window.GENERATE_URL = {{ url_for('generate_intelligence', run_date=run.run_date) | tojson }};
   window.INTEL_GENERATED = {{ generated | tojson }};
+  window.INTEL_KW_COUNT = {{ run.keywords | selectattr('raw_paste') | list | length }};
 </script>
 <script src="{{ url_for('static', filename='intelligence.js') }}"></script>
 {% endblock %}

@@ -9,16 +9,33 @@
       errEl.textContent = '';
       spinner.classList.remove('hidden');
       btn.disabled = true;
+      const kwCount = window.INTEL_KW_COUNT || 26;
+      const messages = [
+        `Analysing ${kwCount} keywords…`,
+        'Extracting SERP features…',
+        'Detecting featured snippets…',
+        'Scanning PAA questions…',
+        'Clustering PAA themes…',
+        'Almost done…',
+      ];
+      let msgIdx = 0;
+      spinner.textContent = messages[0];
+      const msgTimer = setInterval(() => {
+        msgIdx = Math.min(msgIdx + 1, messages.length - 1);
+        spinner.textContent = messages[msgIdx];
+      }, 12000);
       try {
         const resp = await fetch(window.GENERATE_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ force: !!window.INTEL_GENERATED }),
         });
+        clearInterval(msgTimer);
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
         window.location.reload();
       } catch (err) {
+        clearInterval(msgTimer);
         errEl.textContent = 'Error: ' + err.message;
         spinner.classList.add('hidden');
         btn.disabled = false;
