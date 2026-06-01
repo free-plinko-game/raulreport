@@ -9,6 +9,7 @@
 <body>
   <header class="site">
     <a href="{{ url_for('index') }}" class="brand">SERP Classifier</a>
+    <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
     {% block subnav %}{% endblock %}
   </header>
   <main>{% block content %}{% endblock %}</main>

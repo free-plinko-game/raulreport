@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 
@@ -24,6 +25,17 @@ VALID_AD_POSITIONS = {"top", "bottom", "shopping"}
 
 class LLMError(Exception):
     pass
+
+
+def _normalize_domain(raw: str) -> str:
+    """Lowercase, trim, and strip a leading 'www.' PREFIX only.
+
+    Note: do NOT use str.lstrip('www.') — that strips any leading w/. characters
+    and mangles domains like 'west.com' -> 'est.com'. Cross-run trend matching
+    depends on stable domain identity, so this must be a true prefix strip.
+    """
+    d = raw.strip().lower()
+    return re.sub(r"^www\.", "", d)
 
 
 _client: OpenAI | None = None
@@ -86,7 +98,7 @@ def _validate_result(data: dict) -> tuple[list[dict], list[dict]]:
         cleaned.append({
             "rank": int(p.get("rank", i + 1)),
             "short_label": str(p.get("short_label", "")).strip(),
-            "domain": str(p.get("domain", "")).strip().lower().lstrip("www."),
+            "domain": _normalize_domain(str(p.get("domain", ""))),
             "full_url": str(p.get("full_url", "")).strip(),
             "category": cat,
             "reasoning": str(p.get("reasoning", "")).strip(),

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — RaulReport{% endblock %}
+{% block subnav %}
+  <span class="run-date">Trends</span>
+{% endblock %}
+
+{% block content %}
+<div class="dash-header">
+  <h1 class="intel-title">Dashboard</h1>
+  <div class="dash-controls {% if run_count < min_runs %}hidden{% endif %}">
+    <label class="dash-filter">
+      Range
+      <select id="range-select">
+        <option value="4" selected>Last 4 runs</option>
+        <option value="8">Last 8 runs</option>
+        <option value="12">Last 12 runs</option>
+        <option value="all">All runs</option>
+      </select>
+    </label>
+    <label class="dash-filter">
+      Keyword
+      <select id="keyword-select">
+        <option value="all" selected>All {{ keywords | length }} keywords</option>
+        {% for kw in keywords %}
+          <option value="{{ kw }}">{{ kw }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+</div>
+
+{% if run_count < min_runs %}
+<div class="intel-empty dash-gate">
+  <p>Trends unlock after <strong>{{ min_runs }} runs</strong>.</p>
+  <p class="dim">You have {{ run_count }}.
+    {% if min_runs - run_count == 1 %}One more week to go. 🕐{% else %}{{ min_runs - run_count }} more to go. 🕐{% endif %}
+  </p>
+</div>
+{% else %}
+
+<div id="dash-loading" class="dim" style="padding:20px 0">Loading trends…</div>
+<div id="dash-error" class="err-msg"></div>
+
+<div id="dash-body" class="hidden">
+
+  {# ── Banner: hostile share alert ── #}
+  <div id="hostile-alert" class="dash-alert hidden"></div>
+
+  {# ── Section 1 — SERP Health ── #}
+  <section class="intel-section">
+    <h2 class="intel-section-title">1. SERP Health Trend</h2>
+    <p class="dim" style="margin-bottom:10px">Category composition of organic results across runs. Hostile cluster = FAKE_CASINO + EMD + SUBDOMAIN + FLIPPED + HACKED.</p>
+    <div class="chart-wrap"><canvas id="chart-health"></canvas></div>
+    <p id="health-note" class="dim" style="font-size:11px;margin-top:8px"></p>
+  </section>
+
+  {# ── Section 2 — New Entrants ── #}
+  <section class="intel-section">
+    <h2 class="intel-section-title">2. New Entrants <span id="entrants-sub" class="dim"></span></h2>
+    <table class="intel-table" id="entrants-table">
+      <thead><tr><th>Domain</th><th>Category</th><th>Keyword</th><th>Rank</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="entrants-empty" class="dim hidden">No new entrants since the previous run.</p>
+  </section>
+
+  {# ── Section 3 — Operator Visibility (cross-run) ── #}
+  <section class="intel-section">
+    <h2 class="intel-section-title">3. Operator Visibility Index <span class="dim">(cross-run)</span></h2>
+    <p class="dim" style="margin-bottom:10px">Domain persistence across the selected runs. Sorted by runs present.</p>
+    <table class="intel-table" id="ovi-table">
+      <thead><tr><th>Domain</th><th>Category</th><th>Runs</th><th>Avg Keywords</th><th>Avg Pos</th><th>Trend</th><th>First Seen</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  {# ── Section 4 — EMD Tracker ── #}
+  <section class="intel-section">
+    <h2 class="intel-section-title">4. EMD / Throwaway Tracker</h2>
+    <div class="intel-two-col">
+      <div>
+        <h3 class="intel-sub">Active EMDs</h3>
+        <table class="intel-table" id="emd-active-table">
+          <thead><tr><th>Domain</th><th>Keyword</th><th>Pos</th><th>Weeks</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p id="emd-active-empty" class="dim hidden">No EMDs in the latest run.</p>
+      </div>
+      <div>
+        <h3 class="intel-sub">EMD Graveyard</h3>
+        <table class="intel-table" id="emd-graveyard-table">
+          <thead><tr><th>Domain</th><th>Last Seen</th><th>Weeks</th><th>Peak</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p id="emd-graveyard-empty" class="dim hidden">No expired EMDs yet.</p>
+      </div>
+    </div>
+  </section>
+
+  {# ── Section 5 — Keyword Volatility ── #}
+  <section class="intel-section">
+    <h2 class="intel-section-title">5. Keyword Volatility</h2>
+    <p class="dim" style="margin-bottom:10px">Domain churn + position swings across runs (0–100, relative to the busiest keyword).</p>
+    <div class="chart-wrap chart-tall"><canvas id="chart-volatility"></canvas></div>
+  </section>
+
+  {# ── Section 6 — Ads Pressure ── #}
+  <section class="intel-section" id="ads-section">
+    <h2 class="intel-section-title">6. Ads Pressure Trend</h2>
+    <div class="chart-wrap"><canvas id="chart-ads"></canvas></div>
+    <p id="ads-empty" class="dim hidden">No ads data in these runs yet.</p>
+  </section>
+
+</div>
+{% endif %}
+
+<script>
+  window.DASH_DATA_URL = {{ url_for('dashboard_data') | tojson }};
+  window.CATEGORY_LABELS = {{ category_labels | tojson }};
+  window.DASH_READY = {{ (run_count >= min_runs) | tojson }};
+</script>
+{% if run_count >= min_runs %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='charts.js') }}"></script>
+{% endif %}
+{% endblock %}

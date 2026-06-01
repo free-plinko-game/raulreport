@@ -10,11 +10,6 @@ DATA_DIR = Path(__file__).parent / "data"
 RUNS_DIR = DATA_DIR / "runs"
 KEYWORDS_PATH = DATA_DIR / "keywords.json"
 
-VALID_CATEGORIES = {
-    "SUBDOMAIN", "HACKED", "PARASITE", "UGC",
-    "PUBLISHER", "OPERATOR", "GOV", "APP",
-}
-
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -96,6 +91,20 @@ def load_run(run_date: str) -> dict | None:
         return None
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_all_runs() -> list[dict]:
+    """Full run dicts, sorted by run_date ascending. For cross-run trend analysis."""
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    runs = []
+    for p in sorted(RUNS_DIR.glob("*.json")):
+        try:
+            with open(p, encoding="utf-8") as f:
+                runs.append(json.load(f))
+        except (json.JSONDecodeError, OSError):
+            continue
+    runs.sort(key=lambda r: r.get("run_date", ""))
+    return runs
 
 
 def _write(run: dict) -> None:

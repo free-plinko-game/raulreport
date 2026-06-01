@@ -17,11 +17,14 @@ from flask import (
 )
 
 import storage
+import trends
 from config import CATEGORIES, CATEGORY_LABELS, VALID_CATEGORIES
 from llm import (
     LLMError, classify_paste, extract_ads_paste,
     generate_ads_report_analysis, extract_serp_features, cluster_paa,
 )
+
+MIN_RUNS_FOR_DASHBOARD = 3
 from xlsx_export import build_workbook
 from pdf_report import build_report
 from intelligence import operator_visibility_index, serp_landscape_summary, snippet_language_summary
@@ -69,6 +72,51 @@ def index():
     runs = storage.list_runs()
     today = date.today().isoformat()
     return render_template("index.html", runs=runs, today=today)
+
+
+@app.route("/dashboard")
+@requires_auth
+def dashboard():
+    all_runs = storage.load_all_runs()
+    run_dates = [r.get("run_date", "") for r in all_runs]
+    keywords = storage.load_keywords()
+    return render_template(
+        "dashboard.html",
+        run_count=len(all_runs),
+        run_dates=run_dates,
+        keywords=keywords,
+        min_runs=MIN_RUNS_FOR_DASHBOARD,
+        category_labels=CATEGORY_LABELS,
+    )
+
+
+@app.route("/dashboard/data")
+@requires_auth
+def dashboard_data():
+    all_runs = storage.load_all_runs()
+    if len(all_runs) < MIN_RUNS_FOR_DASHBOARD:
+        return jsonify({
+            "ready": False,
+            "run_count": len(all_runs),
+            "min_runs": MIN_RUNS_FOR_DASHBOARD,
+        })
+
+    # Time-range slice: last N runs (4/8/12) or all
+    rng = request.args.get("range", "4")
+    if rng != "all":
+        try:
+            n = int(rng)
+            all_runs = all_runs[-n:] if n > 0 else all_runs
+        except ValueError:
+            all_runs = all_runs[-4:]
+
+    # Keyword filter: "all" or a specific keyword
+    kw = request.args.get("keyword", "all")
+    kw_filter = None if kw == "all" else {kw}
+
+    data = trends.build_dashboard(all_runs, kw_filter)
+    data["ready"] = True
+    return jsonify(data)
 
 
 @app.route("/run", methods=["POST"])

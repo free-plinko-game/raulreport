@@ -31,7 +31,23 @@ header.site {
 }
 
 .brand { color: #fff; font-weight: 600; text-decoration: none; font-size: 16px; }
+.nav-link { color: rgba(255,255,255,0.82); text-decoration: none; font-size: 13px; font-weight: 500; }
+.nav-link:hover { color: #fff; }
 .run-date { font-weight: 600; }
+
+/* ── Dashboard (Phase 4) ── */
+.dash-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+.dash-controls { display: flex; gap: 16px; }
+.dash-filter { font-size: 11px; color: var(--dim); display: flex; flex-direction: column; gap: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+.dash-filter select { font-size: 13px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 5px; background: #fff; text-transform: none; }
+.dash-gate { text-align: center; }
+.dash-alert { background: #fff4f4; border: 1px solid #f0c0c0; color: #8a1a1a; padding: 10px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; margin-bottom: 16px; }
+.chart-wrap { position: relative; height: 320px; width: 100%; }
+.chart-wrap.chart-tall { height: 520px; }
+.intel-table tr.row-hostile td:first-child { font-weight: 600; color: #8a1a1a; }
+.trend-up { color: #c00000; font-weight: 600; }
+.trend-down { color: #548235; font-weight: 600; }
+.trend-stable { color: var(--dim); }
 
 main {
   max-width: 1100px;
