@@ -172,14 +172,17 @@ table.review-table input, table.review-table select { width: 100%; }
 table.review-table tr.dirty td { background: #fff8d8; }
 table.review-table .f-reasoning { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.review-table tr.cat-SUBDOMAIN td:first-child { border-left: 4px solid #F4CCCC; }
-.review-table tr.cat-HACKED    td:first-child { border-left: 4px solid #C00000; }
-.review-table tr.cat-PARASITE  td:first-child { border-left: 4px solid #F6B26B; }
-.review-table tr.cat-UGC       td:first-child { border-left: 4px solid #B4C7E7; }
-.review-table tr.cat-PUBLISHER td:first-child { border-left: 4px solid #C6E0B4; }
-.review-table tr.cat-OPERATOR  td:first-child { border-left: 4px solid #1F3864; }
-.review-table tr.cat-GOV       td:first-child { border-left: 4px solid #548235; }
-.review-table tr.cat-APP       td:first-child { border-left: 4px solid #0070C0; }
+.review-table tr.cat-SUBDOMAIN   td:first-child { border-left: 4px solid #F4CCCC; }
+.review-table tr.cat-FLIPPED     td:first-child { border-left: 4px solid #FCE49B; }
+.review-table tr.cat-EMD         td:first-child { border-left: 4px solid #7030A0; }
+.review-table tr.cat-HACKED      td:first-child { border-left: 4px solid #C00000; }
+.review-table tr.cat-PARASITE    td:first-child { border-left: 4px solid #F6B26B; }
+.review-table tr.cat-UGC         td:first-child { border-left: 4px solid #B4C7E7; }
+.review-table tr.cat-PUBLISHER   td:first-child { border-left: 4px solid #C6E0B4; }
+.review-table tr.cat-OPERATOR    td:first-child { border-left: 4px solid #D8D8D8; }
+.review-table tr.cat-GOV         td:first-child { border-left: 4px solid #548235; }
+.review-table tr.cat-APP         td:first-child { border-left: 4px solid #0070C0; }
+.review-table tr.cat-FAKE_CASINO td:first-child { border-left: 4px solid #3B3B3B; }
 
 .save-row { margin-top: 10px; }
 .spinner, .save-status, .err-msg { font-size: 12px; }
@@ -264,14 +267,17 @@ table.intel-table tbody tr:hover td { background: #f7f7fa; }
 
 /* Category pills */
 .cat-pill { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
-.cat-SUBDOMAIN  { background: #f4cccc; color: #7a1a1a; }
-.cat-HACKED     { background: #c00000; color: #fff; }
-.cat-PARASITE   { background: #f6b26b; color: #7a3b00; }
-.cat-UGC        { background: #b4c7e7; color: #1f3864; }
-.cat-PUBLISHER  { background: #c6e0b4; color: #375623; }
-.cat-OPERATOR   { background: #1f3864; color: #fff; }
-.cat-GOV        { background: #548235; color: #fff; }
-.cat-APP        { background: #0070c0; color: #fff; }
+.cat-SUBDOMAIN   { background: #f4cccc; color: #7a1a1a; }
+.cat-FLIPPED     { background: #fce49b; color: #6b3b00; }
+.cat-EMD         { background: #7030a0; color: #fff; }
+.cat-HACKED      { background: #c00000; color: #fff; }
+.cat-PARASITE    { background: #f6b26b; color: #7a3b00; }
+.cat-UGC         { background: #b4c7e7; color: #1f3864; }
+.cat-PUBLISHER   { background: #c6e0b4; color: #375623; }
+.cat-OPERATOR    { background: #d8d8d8; color: #222; }
+.cat-GOV         { background: #548235; color: #fff; }
+.cat-APP         { background: #0070c0; color: #fff; }
+.cat-FAKE_CASINO { background: #3b3b3b; color: #fff; }
 .cat-OTHER, .cat-UNKNOWN { background: #eee; color: #555; }
 
 /* Featured snippet ownership bars */

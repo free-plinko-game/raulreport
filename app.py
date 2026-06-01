@@ -17,8 +17,9 @@ from flask import (
 )
 
 import storage
+from config import CATEGORIES, CATEGORY_LABELS, VALID_CATEGORIES
 from llm import (
-    LLMError, VALID_CATEGORIES, classify_paste, extract_ads_paste,
+    LLMError, classify_paste, extract_ads_paste,
     generate_ads_report_analysis, extract_serp_features, cluster_paa,
 )
 from xlsx_export import build_workbook
@@ -90,7 +91,8 @@ def view_run(run_date: str):
         run=run,
         done=done,
         total=len(run["keywords"]),
-        categories=sorted(VALID_CATEGORIES),
+        categories=CATEGORIES,
+        category_labels=CATEGORY_LABELS,
     )
 
 
@@ -205,6 +207,7 @@ def view_intelligence(run_date: str):
         ovi=ovi,
         landscape=landscape,
         snippet=snippet,
+        category_labels=CATEGORY_LABELS,
     )
 
 

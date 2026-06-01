@@ -9,6 +9,8 @@ from pathlib import Path
 
 from openai import OpenAI, APIError, RateLimitError, APITimeoutError
 
+from config import VALID_CATEGORIES  # single source of truth for the taxonomy
+
 logger = logging.getLogger(__name__)
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "extract_and_classify.md"
@@ -16,11 +18,6 @@ ADS_PROMPT_PATH = Path(__file__).parent / "prompts" / "extract_ads.md"
 ADS_REPORT_PROMPT_PATH = Path(__file__).parent / "prompts" / "ads_report_analysis.md"
 SERP_FEATURES_PROMPT_PATH = Path(__file__).parent / "prompts" / "extract_serp_features.md"
 CLUSTER_PAA_PROMPT_PATH = Path(__file__).parent / "prompts" / "cluster_paa.md"
-
-VALID_CATEGORIES = {
-    "SUBDOMAIN", "HACKED", "PARASITE", "UGC",
-    "PUBLISHER", "OPERATOR", "GOV", "APP",
-}
 
 VALID_AD_POSITIONS = {"top", "bottom", "shopping"}
 
@@ -165,6 +162,9 @@ def _validate_ads(data: dict) -> list[dict]:
         ad_pos = (a.get("ad_position") or "top").lower().strip()
         if ad_pos not in VALID_AD_POSITIONS:
             ad_pos = "top"
+        dom_cat = (a.get("domain_category") or "OTHER").upper().strip()
+        if dom_cat not in VALID_CATEGORIES:
+            dom_cat = "OTHER"
         ads.append({
             "position": int(a.get("position", i + 1)),
             "ad_position": ad_pos,
@@ -173,6 +173,7 @@ def _validate_ads(data: dict) -> list[dict]:
             "landing_url": str(a.get("landing_url", "")).strip(),
             "is_offshore": bool(a.get("is_offshore", False)),
             "notes": str(a.get("notes", "")).strip(),
+            "domain_category": dom_cat,
         })
     return ads
 

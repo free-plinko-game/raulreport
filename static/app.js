@@ -52,19 +52,25 @@
       return;
     }
 
-    const rows = ads.map(ad => `
+    const labels = window.CATEGORY_LABELS || {};
+    const rows = ads.map(ad => {
+      const dc = ad.domain_category || 'OTHER';
+      const dcLabel = labels[dc] || dc;
+      return `
       <tr>
         <td>${ad.position}</td>
         <td>${escapeHtml(ad.advertiser)}</td>
+        <td><span class="cat-pill cat-${escapeHtml(dc)}">${escapeHtml(dcLabel)}</span></td>
         <td class="dim"><a href="${escapeHtml(ad.landing_url)}" target="_blank" rel="noopener">${escapeHtml(ad.display_url || ad.landing_url)}</a></td>
         <td>${escapeHtml(ad.ad_position)}</td>
         <td>${ad.is_offshore ? '<span class="offshore-flag">YES ⚠</span>' : 'no'}</td>
         <td class="dim">${escapeHtml(ad.notes)}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     detailRow.innerHTML = `<td colspan="4">
       <table class="ads-detail-table">
-        <thead><tr><th>#</th><th>Advertiser</th><th>Landing Page</th><th>Pos</th><th>Offshore</th><th>Notes</th></tr></thead>
+        <thead><tr><th>#</th><th>Advertiser</th><th>Type</th><th>Landing Page</th><th>Pos</th><th>Offshore</th><th>Notes</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></td>`;
 
@@ -129,7 +135,7 @@
       <td><input class="f-short-label" value="${escapeHtml(p.short_label || '')}"></td>
       <td class="f-domain" title="${escapeHtml(p.full_url || '')}">${escapeHtml(p.domain || '')}</td>
       <td><select class="f-category">${
-        window.CATEGORIES.map(c => `<option value="${c}"${c === p.category ? ' selected' : ''}>${c}</option>`).join('')
+        window.CATEGORIES.map(c => `<option value="${escapeHtml(c.key)}"${c.key === p.category ? ' selected' : ''}>${escapeHtml(c.label)}</option>`).join('')
       }</select></td>
       <td class="dim f-reasoning" title="${escapeHtml(p.reasoning || '')}">${escapeHtml(p.reasoning || '')}</td>
     `;

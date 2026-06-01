@@ -77,7 +77,7 @@
   <div class="snippet-ownership">
     {% for cat, count in scd.items() | sort(attribute='1', reverse=True) %}
     <div class="snippet-row">
-      <span class="cat-pill cat-{{ cat }}">{{ cat }}</span>
+      <span class="cat-pill cat-{{ cat }}">{{ category_labels.get(cat, cat) }}</span>
       <div class="snippet-bar-wrap">
         <div class="snippet-bar" style="width: {{ (count / snippet_count * 100) | round }}%"></div>
       </div>
@@ -185,7 +185,7 @@
   <div class="ovi-filters">
     <button class="ovi-filter active" data-cat="ALL">All</button>
     {% for cat in ovi.categories %}
-      <button class="ovi-filter" data-cat="{{ cat }}">{{ cat }}</button>
+      <button class="ovi-filter" data-cat="{{ cat }}">{{ category_labels.get(cat, cat) }}</button>
     {% endfor %}
   </div>
 
@@ -209,7 +209,7 @@
         <td class="ovi-domain">
           <span class="domain-name">{{ d.domain }}</span>
         </td>
-        <td><span class="cat-pill cat-{{ d.category }}">{{ d.category }}</span></td>
+        <td><span class="cat-pill cat-{{ d.category }}">{{ category_labels.get(d.category, d.category) }}</span></td>
         <td><strong>{{ d.keyword_count }}</strong> / {{ ovi.total_keywords }}</td>
         <td class="dim">{{ d.total_appearances }}</td>
         <td class="dim">{{ d.avg_position }}</td>

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from fpdf import FPDF
 
+from config import CATEGORIES, hex_to_rgb
+
 NAVY        = (31, 56, 100)
 RED         = (192, 0, 0)
 ORANGE      = (246, 178, 107)
@@ -17,18 +19,11 @@ DARK_GREY   = (100, 100, 105)
 WHITE       = (255, 255, 255)
 BLACK       = (34, 34, 34)
 
-CAT_COLOURS = {
-    "OPERATOR":  NAVY,
-    "PUBLISHER": BLUE,
-    "SUBDOMAIN": TEAL,
-    "PARASITE":  ORANGE,
-    "HACKED":    RED,
-    "UGC":       PURPLE,
-    "GOV":       GREEN,
-    "APP":       AMBER,
-    "UNKNOWN":   MID_GREY,
-    "OTHER":     MID_GREY,
-}
+# Category swatch colours, derived from the central taxonomy palette so the PDF,
+# the xlsx and the web UI all stay in lockstep.
+CAT_COLOURS = {c.key: hex_to_rgb(c.fill) for c in CATEGORIES}
+CAT_COLOURS["UNKNOWN"] = MID_GREY
+CAT_COLOURS["OTHER"] = MID_GREY
 
 _UNICODE_REPLACEMENTS = str.maketrans({
     "—": "-",  # em dash

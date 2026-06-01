@@ -53,6 +53,21 @@ is NOT an ad — ignore it.
   - "Affiliate lead-gen — likely redirects to offshore brands"
   - "Unknown brand — foreign TLD, casino product, no AU licence signals"
 
+- `domain_category` — classify the **landing domain** into exactly one of the
+  taxonomy keys below (this is the nature of the domain, separate from whether it
+  is offshore):
+  - `OPERATOR` — a licensed, legitimate casino/sportsbook brand's own site
+  - `FAKE_CASINO` — a site functioning as a casino but an unlicensed offshore imposter
+  - `EMD` — a purpose-built exact-match keyword domain (e.g. `real-money-casino-aus.online`)
+  - `SUBDOMAIN` — casino spam in a subdomain or on a pseudo/throwaway TLD (.site, .club, .online)
+  - `FLIPPED` — a formerly-legit domain now wholly turned into casino content
+  - `PARASITE` — a legit news/general site with an affiliate casino sub-section
+  - `UGC` — user-generated platform (Reddit, Trustpilot, etc.)
+  - `PUBLISHER` — a legitimate gambling-industry review hub
+  - `APP` — an app-store listing
+  - `OTHER` — none of the above / cannot tell
+  Most casino ads will be `OPERATOR`, `FAKE_CASINO`, `EMD` or `PARASITE`.
+
 ---
 
 ## Output schema
@@ -69,7 +84,8 @@ Return **only** this JSON object:
       "display_url": "betwinner.com › au",
       "landing_url": "https://betwinner.com/au/casino",
       "is_offshore": true,
-      "notes": "Known offshore operator targeting AU casino keywords"
+      "notes": "Known offshore operator targeting AU casino keywords",
+      "domain_category": "FAKE_CASINO"
     }
   ]
 }
@@ -78,4 +94,6 @@ Return **only** this JSON object:
 If no ads are found, return `{"ads": []}`.
 
 `ad_position` MUST be one of: `"top"`, `"bottom"`, `"shopping"`.
+`domain_category` MUST be one of: `OPERATOR`, `FAKE_CASINO`, `EMD`, `SUBDOMAIN`,
+`FLIPPED`, `PARASITE`, `UGC`, `PUBLISHER`, `APP`, `OTHER`.
 Do not invent ads. Only extract what is explicitly present in the paste.

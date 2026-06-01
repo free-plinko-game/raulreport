@@ -94,7 +94,7 @@
               <td>
                 <select class="f-category">
                   {% for c in categories %}
-                    <option value="{{ c }}" {% if c == p.category %}selected{% endif %}>{{ c }}</option>
+                    <option value="{{ c.key }}" {% if c.key == p.category %}selected{% endif %}>{{ c.label }}</option>
                   {% endfor %}
                 </select>
               </td>
@@ -162,13 +162,15 @@
           <td colspan="4">
             <table class="ads-detail-table">
               <thead>
-                <tr><th>#</th><th>Advertiser</th><th>Landing Page</th><th>Pos</th><th>Offshore</th><th>Notes</th></tr>
+                <tr><th>#</th><th>Advertiser</th><th>Type</th><th>Landing Page</th><th>Pos</th><th>Offshore</th><th>Notes</th></tr>
               </thead>
               <tbody>
                 {% for ad in kw.ads %}
+                {% set dc = ad.domain_category or 'OTHER' %}
                 <tr>
                   <td>{{ ad.position }}</td>
                   <td>{{ ad.advertiser }}</td>
+                  <td><span class="cat-pill cat-{{ dc }}">{{ category_labels.get(dc, dc) }}</span></td>
                   <td class="dim"><a href="{{ ad.landing_url }}" target="_blank" rel="noopener">{{ ad.display_url or ad.landing_url }}</a></td>
                   <td>{{ ad.ad_position }}</td>
                   <td>{% if ad.is_offshore %}<span class="offshore-flag">YES ⚠</span>{% else %}no{% endif %}</td>
@@ -188,7 +190,8 @@
 <script>
   window.RUN_DATE = {{ run.run_date | tojson }};
   window.TOTAL_KW = {{ total }};
-  window.CATEGORIES = {{ categories | tojson }};
+  window.CATEGORIES = [{% for c in categories %}{"key": {{ c.key | tojson }}, "label": {{ c.label | tojson }}}{% if not loop.last %}, {% endif %}{% endfor %}];
+  window.CATEGORY_LABELS = {{ category_labels | tojson }};
 </script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 {% endblock %}
