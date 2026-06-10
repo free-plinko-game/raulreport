@@ -299,3 +299,28 @@ These exist in the repo and contain working logic / data the app can build on:
 3. **Keyword changes mid-run**: if `keywords.json` is edited while a run is in progress, what happens to the in-progress run?
 
 Best handled by getting v1 in front of real users and seeing what comes up.
+
+---
+
+## 15. Security / production hardening
+
+The tool is deployed publicly (DigitalOcean droplet, gunicorn behind systemd) and
+holds an OpenAI key, so a reachable endpoint is a real budget risk. §13 listed
+public deployment as out-of-scope for v1 — it now IS deployed, so these become
+requirements. Status is tracked in `done.md`.
+
+- **Auth on every LLM endpoint** — all routes that call OpenAI must require auth.
+  (HTTP Basic, constant-time compare, denies when `APP_PASSWORD` unset.)
+- **Secrets file perms** — `.env` must be `600` (owner-only), never committed.
+- **Input validation** — `run_date` URL/form params must match `YYYY-MM-DD`
+  before touching the filesystem (defense-in-depth against path tricks).
+- **Rate limiting** — OpenAI-spending endpoints capped per client IP to bound the
+  cost of abuse or a runaway client.
+- **Least privilege** — the web process must not run as root; dedicated
+  low-privilege system user + systemd sandboxing
+  (`NoNewPrivileges`, `ProtectSystem`, `PrivateTmp`).
+- **TLS** — credentials must not travel in cleartext; nginx + HTTPS in front,
+  gunicorn bound to localhost. Self-signed cert until a domain is available
+  (Let's Encrypt can't certify a bare IP).
+- **Firewall** — only 22 / 80 / 443 (+ this app's TLS port) open; no direct
+  gunicorn exposure.

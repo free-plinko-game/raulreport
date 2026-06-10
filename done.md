@@ -229,3 +229,52 @@ has fixed columns and ads intel is analyst-facing, not the weekly deliverable.
     ├── intelligence.html
     └── run.html
 ```
+
+---
+
+## Security hardening pass (2026-06-10)
+
+Triggered by the app being publicly reachable over the internet with an OpenAI
+key (budget-abuse risk). Findings worked most-dangerous-first; status below.
+
+### Done — application code (this repo)
+- **run_date path-traversal seatbelt** (`app.py`) — added `_RUN_DATE_RE`
+  (`^\d{4}-\d{2}-\d{2}$`) and a `_load_run_or_404()` helper that rejects any
+  non-date `run_date` with 404 *before* it reaches the `data/runs/<date>.json`
+  path. Replaces the duplicated load-or-404 block across 8 routes; `create_run`
+  validates the form value with 400. Low real risk (Flask's router already
+  blocks slashes) but defense-in-depth. Verified: bad dates and `..%2f..` → 404,
+  no recursion/500.
+- **Rate limiting** (`app.py`, `requirements.txt`) — added `Flask-Limiter==4.1.1`.
+  Caps the three OpenAI-spending endpoints by client IP: `process` 30/min,
+  `intelligence/generate` 6/min (fans out to dozens of LLM calls per press — the
+  tightest), `ads-report` 12/min. Blocked requests get 429 with no OpenAI call.
+  In-memory storage → counts are per-worker (~2x with 2 gunicorn workers).
+  Verified: 31st call within a minute → 429. NOTE: once nginx fronts the app, add
+  `ProxyFix` so the limiter keys on the real client IP, not nginx's.
+
+### Done — server (not in repo)
+- **`.env` perms 644 → 600** — `/opt/raulreport/.env` (OpenAI key + app password)
+  was world-readable on a multi-user box; now owner-only.
+
+### Confirmed already-safe
+- **Auth on every OpenAI route** — all 3 OpenAI-calling routes carry
+  `@requires_auth` (constant-time `secrets.compare_digest`, denies if
+  `APP_PASSWORD` unset). Only `/healthz` is open and it touches no OpenAI.
+- **`.env` never committed** — `git log --all -- .env` is empty.
+
+### Pending — server infra
+- **Drop root**: `raulreport.service` runs gunicorn as `User=root`. Plan:
+  dedicated locked-down system user (NOT `deploy` — it has `NOPASSWD: ALL` sudo)
+  + `NoNewPrivileges` / `ProtectSystem` / `PrivateTmp`.
+- **TLS**: gunicorn binds `0.0.0.0:1539` over plain HTTP (Basic Auth password sent
+  in cleartext). Plan: bind to `127.0.0.1`, nginx reverse-proxy with a self-signed
+  cert (no domain available), `ProxyFix` for real client IPs, close direct 1539.
+- **Firewall**: ufw currently allows 1539 from anywhere.
+- **sudo scope**: `deploy` has `(ALL) NOPASSWD: ALL` — a narrow "restart only" line
+  is moot until that's tightened. Deferred (lockout risk); decision pending.
+
+### Deploy note for the code changes
+On the server: `git pull` in `/opt/raulreport`, then `pip install -r
+requirements.txt` in the venv (picks up Flask-Limiter), then `systemctl restart
+raulreport`. The dir is root-owned, so run via sudo.

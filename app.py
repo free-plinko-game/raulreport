@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import secrets
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
@@ -15,6 +16,8 @@ from flask import (
     Flask, Response, abort, jsonify, redirect, render_template, request,
     send_file, url_for,
 )
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 import storage
 import trends
@@ -38,6 +41,14 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB paste cap
 
+# Rate limiter — caps abuse of the OpenAI-spending endpoints (see @limiter.limit below).
+# In-memory storage: counts are per-worker (gunicorn runs 2), so effective limits are ~2x.
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    storage_uri="memory://",
+)
+
 
 def _check_auth(username: str, password: str) -> bool:
     expected_u = os.environ.get("APP_USERNAME", "admin")
@@ -59,6 +70,21 @@ def requires_auth(f):
             )
         return f(*args, **kwargs)
     return wrapper
+
+
+_RUN_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _load_run_or_404(run_date: str):
+    """Reject anything that isn't a YYYY-MM-DD date before it reaches the filesystem
+    (defense-in-depth against path tricks in the data/runs/ filename), then load
+    the run or 404."""
+    if not _RUN_DATE_RE.match(run_date):
+        abort(404)
+    run = storage.load_run(run_date)
+    if run is None:
+        abort(404)
+    return run
 
 
 @app.route("/healthz")
@@ -123,6 +149,8 @@ def dashboard_data():
 @requires_auth
 def create_run():
     run_date = request.form.get("run_date") or date.today().isoformat()
+    if not _RUN_DATE_RE.match(run_date):
+        abort(400)
     storage.create_run(run_date)
     return redirect(url_for("view_run", run_date=run_date))
 
@@ -130,9 +158,7 @@ def create_run():
 @app.route("/run/<run_date>")
 @requires_auth
 def view_run(run_date: str):
-    run = storage.load_run(run_date)
-    if run is None:
-        abort(404)
+    run = _load_run_or_404(run_date)
     done = sum(1 for k in run["keywords"] if k.get("processed_at"))
     return render_template(
         "run.html",
@@ -146,10 +172,9 @@ def view_run(run_date: str):
 
 @app.route("/run/<run_date>/keyword/<int:idx>/process", methods=["POST"])
 @requires_auth
+@limiter.limit("30 per minute")
 def process_keyword(run_date: str, idx: int):
-    run = storage.load_run(run_date)
-    if run is None:
-        abort(404)
+    run = _load_run_or_404(run_date)
     if not 0 <= idx < len(run["keywords"]):
         abort(404)
     payload = request.get_json(silent=True) or request.form
@@ -184,9 +209,7 @@ def process_keyword(run_date: str, idx: int):
 @app.route("/run/<run_date>/keyword/<int:idx>/save", methods=["POST"])
 @requires_auth
 def save_keyword(run_date: str, idx: int):
-    run = storage.load_run(run_date)
-    if run is None:
-        abort(404)
+    run = _load_run_or_404(run_date)
     if not 0 <= idx < len(run["keywords"]):
         abort(404)
     payload = request.get_json(silent=True) or {}
@@ -222,9 +245,7 @@ def save_keyword(run_date: str, idx: int):
 @app.route("/run/<run_date>/generate")
 @requires_auth
 def generate_xlsx(run_date: str):
-    run = storage.load_run(run_date)
-    if run is None:
-        abort(404)
+    run = _load_run_or_404(run_date)
     wb = build_workbook(run)
     buf = BytesIO()
     wb.save(buf)
@@ -241,9 +262,7 @@ def generate_xlsx(run_date: str):
 @app.route("/run/<run_date>/intelligence")
 @requires_auth
 def view_intelligence(run_date: str):
-    run = storage.load_run(run_date)
-    if run is None:
-        abort(404)
+    run = _load_run_or_404(run_date)
     generated = bool(run.get("intelligence_generated_at"))
     ovi = operator_visibility_index(run["keywords"]) if generated else None
     landscape = serp_landscape_summary(run["keywords"]) if generated else None
@@ -261,10 +280,9 @@ def view_intelligence(run_date: str):
 
 @app.route("/run/<run_date>/intelligence/generate", methods=["POST"])
 @requires_auth
+@limiter.limit("6 per minute")
 def generate_intelligence(run_date: str):
-    run = storage.load_run(run_date)
-    if run is None:
-        abort(404)
+    run = _load_run_or_404(run_date)
 
     payload = request.get_json(silent=True) or {}
     force = bool(payload.get("force", False))
@@ -335,9 +353,7 @@ def generate_intelligence(run_date: str):
 @app.route("/run/<run_date>/intelligence/pdf")
 @requires_auth
 def intelligence_pdf(run_date: str):
-    run = storage.load_run(run_date)
-    if run is None:
-        abort(404)
+    run = _load_run_or_404(run_date)
     if not run.get("intelligence_generated_at"):
         abort(404)
     landscape = serp_landscape_summary(run["keywords"])
@@ -355,10 +371,9 @@ def intelligence_pdf(run_date: str):
 
 @app.route("/run/<run_date>/ads-report")
 @requires_auth
+@limiter.limit("12 per minute")
 def ads_report(run_date: str):
-    run = storage.load_run(run_date)
-    if run is None:
-        abort(404)
+    run = _load_run_or_404(run_date)
 
     keywords_with_ads = [
         {"keyword": k["keyword"], "ads": k.get("ads", [])}
