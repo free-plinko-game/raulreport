@@ -250,12 +250,39 @@ key (budget-abuse risk). Findings worked most-dangerous-first; status below.
   `intelligence/generate` 6/min (fans out to dozens of LLM calls per press — the
   tightest), `ads-report` 12/min. Blocked requests get 429 with no OpenAI call.
   In-memory storage → counts are per-worker (~2x with 2 gunicorn workers).
-  Verified: 31st call within a minute → 429. NOTE: once nginx fronts the app, add
-  `ProxyFix` so the limiter keys on the real client IP, not nginx's.
+  Verified: 31st call within a minute → 429.
+- **ProxyFix** (`app.py`) — `ProxyFix(app.wsgi_app, x_for=1, x_proto=1)` so behind
+  nginx the limiter keys on the real client IP and `request.scheme` reflects HTTPS.
+  Safe because gunicorn binds 127.0.0.1 (nginx is the only client — otherwise
+  clients could spoof `X-Forwarded-For`). Verified: 40 distinct forwarded IPs →
+  no false 429; same IP trips at 31.
 
 ### Done — server (not in repo)
-- **`.env` perms 644 → 600** — `/opt/raulreport/.env` (OpenAI key + app password)
-  was world-readable on a multi-user box; now owner-only.
+- **`.env` locked down** — `/opt/raulreport/.env` (OpenAI key + app password) was
+  world-readable (644). Now `root:raulreport 640`: readable only by root and the
+  service user, no access for other users on the box. (Started as 600 root-only,
+  then relaxed to 640 group-read once the app dropped to the `raulreport` user —
+  see gotcha below.)
+- **Dropped root + systemd sandboxing** — `raulreport.service` now runs gunicorn as
+  a dedicated low-priv system user `raulreport` (no login shell, no home, no sudo),
+  not root. Added `NoNewPrivileges`, `ProtectSystem=strict` (filesystem read-only
+  except `ReadWritePaths=/opt/raulreport/data`), `ProtectHome`, `PrivateTmp`,
+  `ProtectKernelTunables/Modules`, `ProtectControlGroups`, `RestrictSUIDSGID`,
+  `LockPersonality`. `data/` chowned to the service user. Original unit backed up at
+  `/etc/systemd/system/raulreport.service.bak-prehardening`. Verified: healthz 200,
+  runs as `raulreport`, can write `data/runs/`.
+  - **Gotcha:** `load_dotenv()` opens `.env` at import and raises `PermissionError`
+    if the file exists but is unreadable (it does *not* skip silently). That's why
+    `.env` must be group-readable by the service user (640), not 600 root-only.
+- **TLS via nginx (self-signed)** — gunicorn moved to `127.0.0.1:8011` (no longer
+  internet-facing); nginx terminates TLS on `:1539` and reverse-proxies to it.
+  Self-signed cert at `/etc/ssl/raulreport/` (CN/SAN = `209.97.176.252`; no domain
+  exists, so Let's Encrypt isn't possible — browsers show a one-time "not trusted"
+  warning). Credentials + traffic now encrypted in transit. Site config at
+  `/etc/nginx/sites-available/raulreport`; the existing `worldcup` site (80/443)
+  was left untouched. **App URL is now `https://209.97.176.252:1539/`** (was http);
+  plain HTTP to 1539 returns 400. Unit ExecStart bind changed accordingly; pre-TLS
+  unit snapshot at `/tmp/raulreport.service.step6prev`.
 
 ### Confirmed already-safe
 - **Auth on every OpenAI route** — all 3 OpenAI-calling routes carry
@@ -263,16 +290,19 @@ key (budget-abuse risk). Findings worked most-dangerous-first; status below.
   `APP_PASSWORD` unset). Only `/healthz` is open and it touches no OpenAI.
 - **`.env` never committed** — `git log --all -- .env` is empty.
 
-### Pending — server infra
-- **Drop root**: `raulreport.service` runs gunicorn as `User=root`. Plan:
-  dedicated locked-down system user (NOT `deploy` — it has `NOPASSWD: ALL` sudo)
-  + `NoNewPrivileges` / `ProtectSystem` / `PrivateTmp`.
-- **TLS**: gunicorn binds `0.0.0.0:1539` over plain HTTP (Basic Auth password sent
-  in cleartext). Plan: bind to `127.0.0.1`, nginx reverse-proxy with a self-signed
-  cert (no domain available), `ProxyFix` for real client IPs, close direct 1539.
-- **Firewall**: ufw currently allows 1539 from anywhere.
-- **sudo scope**: `deploy` has `(ALL) NOPASSWD: ALL` — a narrow "restart only" line
-  is moot until that's tightened. Deferred (lockout risk); decision pending.
+### Firewall
+- ufw left as-is: `1539` stays open (now nginx TLS, intended); `22/80/443` for SSH
+  + worldcup; `7584` for the block-monitor app. Deliberately NOT cut to "22/80/443
+  only" (the original item's wording) — that would break the block-monitor (`7584`)
+  and this app (`1539`). The real win (raw gunicorn no longer exposed) comes from
+  binding it to `127.0.0.1`. Optional cleanup: the `8500` ufw rule has nothing
+  listening behind it and could be removed — another app's concern, left alone.
+
+### Decision pending
+- **sudo scope (item 5)**: `deploy` has `(ALL) NOPASSWD: ALL`. A narrow
+  "restart raulreport only" line is moot while that blanket grant exists. Tightening
+  it has a lockout trade-off (deploy may have no password set, and the automation/
+  SSH here operates as deploy). Must be done LAST. Awaiting user decision.
 
 ### Deploy note for the code changes
 On the server: `git pull` in `/opt/raulreport`, then `pip install -r
