@@ -298,11 +298,13 @@ key (budget-abuse risk). Findings worked most-dangerous-first; status below.
   binding it to `127.0.0.1`. Optional cleanup: the `8500` ufw rule has nothing
   listening behind it and could be removed — another app's concern, left alone.
 
-### Decision pending
-- **sudo scope (item 5)**: `deploy` has `(ALL) NOPASSWD: ALL`. A narrow
-  "restart raulreport only" line is moot while that blanket grant exists. Tightening
-  it has a lockout trade-off (deploy may have no password set, and the automation/
-  SSH here operates as deploy). Must be done LAST. Awaiting user decision.
+### Decision — sudo scope (item 5): left as-is
+- `deploy` keeps `(ALL) NOPASSWD: ALL` by choice (2026-06-10). For a single-admin
+  internal tool this is acceptable; security now rests on protecting the `deploy`
+  SSH key (it is effectively a root key). Mitigation: keep the key on trusted
+  machines only; remove a machine's public key from
+  `/home/deploy/.ssh/authorized_keys` if it's lost or retired. Revisit (tighten to
+  a restart-only sudoers line) if more people or keys gain `deploy` access.
 
 ### Deploy note for the code changes
 On the server: `git pull` in `/opt/raulreport`, then `pip install -r
