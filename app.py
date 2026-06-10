@@ -18,6 +18,7 @@ from flask import (
 )
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import storage
 import trends
@@ -40,6 +41,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB paste cap
+
+# Behind nginx (one proxy hop): trust X-Forwarded-For / X-Forwarded-Proto so the
+# client's real IP reaches the rate limiter and request.scheme reflects HTTPS.
+# Safe only because gunicorn binds 127.0.0.1 — nginx is the sole client.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
 # Rate limiter — caps abuse of the OpenAI-spending endpoints (see @limiter.limit below).
 # In-memory storage: counts are per-worker (gunicorn runs 2), so effective limits are ~2x.
